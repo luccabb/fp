@@ -38,8 +38,14 @@ jobs:
           - name: Fedora 43
             image: registry.fedoraproject.org/fedora:43
             pkg: dnf install -y gcc make git tar
+          - name: Fedora 44
+            image: registry.fedoraproject.org/fedora:44
+            pkg: dnf install -y gcc make git tar
           - name: Amazon Linux 2023
             image: amazonlinux:2023
+            pkg: dnf install -y gcc make git tar
+          - name: RHEL 9 (UBI)
+            image: registry.access.redhat.com/ubi9/ubi:latest
             pkg: dnf install -y gcc make git tar
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
