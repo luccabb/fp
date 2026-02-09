@@ -5,6 +5,10 @@
  * reliability.  The OS guarantees the returned port is not in use and
  * not in TIME_WAIT at the moment of assignment.
  *
+ * When multiple ports are requested, all sockets are held open
+ * simultaneously so the kernel guarantees every port is unique —
+ * no retry loop, no exclusion list.
+ *
  * For range-constrained searches we try-bind with a randomised start
  * offset so concurrent invocations are unlikely to collide.
  */
@@ -19,7 +23,7 @@
 #include <time.h>
 #include <unistd.h>
 
-#define FP_VERSION "1.0.0"
+#define FP_VERSION "1.1.0"
 #define MAX_PORTS  1024
 
 static void usage(FILE *out)
@@ -38,122 +42,113 @@ static void usage(FILE *out)
 }
 
 /* --------------------------------------------------------------- */
-/*  Core: let the kernel pick a free port (bind-to-0 method)       */
+/*  Helpers                                                        */
 /* --------------------------------------------------------------- */
-static int find_free_port(int socktype, int family, const int *exclude,
-			  int nexclude)
+static void setup_addr(struct sockaddr_storage *sa, socklen_t *salen,
+		       int family, int port)
 {
-	int attempts = 64; /* retry if we hit a duplicate */
+	memset(sa, 0, sizeof(*sa));
+	if (family == AF_INET) {
+		struct sockaddr_in *a = (struct sockaddr_in *)sa;
+		a->sin_family      = AF_INET;
+		a->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+		a->sin_port        = htons(port);
+		*salen = sizeof(*a);
+	} else {
+		struct sockaddr_in6 *a = (struct sockaddr_in6 *)sa;
+		a->sin6_family = AF_INET6;
+		a->sin6_addr   = in6addr_loopback;
+		a->sin6_port   = htons(port);
+		*salen = sizeof(*a);
+	}
+}
 
-	while (attempts-- > 0) {
-		int fd = socket(family, socktype, 0);
-		if (fd < 0) {
+static int read_port(struct sockaddr_storage *sa, int family)
+{
+	if (family == AF_INET)
+		return ntohs(((struct sockaddr_in *)sa)->sin_port);
+	return ntohs(((struct sockaddr_in6 *)sa)->sin6_port);
+}
+
+/* --------------------------------------------------------------- */
+/*  Batch: open N sockets at once — kernel guarantees uniqueness    */
+/* --------------------------------------------------------------- */
+static int find_free_ports(int *ports, int count, int socktype, int family)
+{
+	int fds[MAX_PORTS];
+	int i;
+
+	/* open and bind all sockets before reading any ports */
+	for (i = 0; i < count; i++) {
+		fds[i] = socket(family, socktype, 0);
+		if (fds[i] < 0) {
 			perror("fp: socket");
-			return -1;
+			goto fail;
 		}
 
 		struct sockaddr_storage sa;
 		socklen_t salen;
-		memset(&sa, 0, sizeof(sa));
+		setup_addr(&sa, &salen, family, 0);
 
-		if (family == AF_INET) {
-			struct sockaddr_in *a = (struct sockaddr_in *)&sa;
-			a->sin_family      = AF_INET;
-			a->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-			a->sin_port        = 0;
-			salen = sizeof(*a);
-		} else {
-			struct sockaddr_in6 *a = (struct sockaddr_in6 *)&sa;
-			a->sin6_family = AF_INET6;
-			a->sin6_addr   = in6addr_loopback;
-			a->sin6_port   = 0;
-			salen = sizeof(*a);
-		}
-
-		if (bind(fd, (struct sockaddr *)&sa, salen) < 0) {
-			close(fd);
+		if (bind(fds[i], (struct sockaddr *)&sa, salen) < 0) {
 			perror("fp: bind");
-			return -1;
+			i++;  /* include this fd in cleanup */
+			goto fail;
 		}
-
-		if (getsockname(fd, (struct sockaddr *)&sa, &salen) < 0) {
-			close(fd);
-			perror("fp: getsockname");
-			return -1;
-		}
-
-		int port;
-		if (family == AF_INET)
-			port = ntohs(((struct sockaddr_in *)&sa)->sin_port);
-		else
-			port = ntohs(((struct sockaddr_in6 *)&sa)->sin6_port);
-
-		close(fd);
-
-		/* check exclusion list (already-returned ports) */
-		int dup = 0;
-		for (int i = 0; i < nexclude; i++) {
-			if (exclude[i] == port) { dup = 1; break; }
-		}
-		if (!dup)
-			return port;
 	}
+
+	/* all bound — now read assigned ports */
+	for (i = 0; i < count; i++) {
+		struct sockaddr_storage sa;
+		socklen_t salen = sizeof(sa);
+		if (getsockname(fds[i], (struct sockaddr *)&sa, &salen) < 0) {
+			perror("fp: getsockname");
+			goto fail_all;
+		}
+		ports[i] = read_port(&sa, family);
+	}
+
+	/* close all */
+	for (i = 0; i < count; i++)
+		close(fds[i]);
+	return 0;
+
+fail_all:
+	i = count;
+fail:
+	for (int j = 0; j < i; j++)
+		close(fds[j]);
 	return -1;
 }
 
 /* --------------------------------------------------------------- */
 /*  Range-constrained search: try-bind with random start           */
 /* --------------------------------------------------------------- */
-static int try_bind_port(int port, int socktype, int family)
-{
-	int fd = socket(family, socktype, 0);
-	if (fd < 0)
-		return 0;
-
-	struct sockaddr_storage sa;
-	socklen_t salen;
-	memset(&sa, 0, sizeof(sa));
-
-	if (family == AF_INET) {
-		struct sockaddr_in *a = (struct sockaddr_in *)&sa;
-		a->sin_family      = AF_INET;
-		a->sin_addr.s_addr = htonl(INADDR_LOOPBACK);
-		a->sin_port        = htons(port);
-		salen = sizeof(*a);
-	} else {
-		struct sockaddr_in6 *a = (struct sockaddr_in6 *)&sa;
-		a->sin6_family = AF_INET6;
-		a->sin6_addr   = in6addr_loopback;
-		a->sin6_port   = htons(port);
-		salen = sizeof(*a);
-	}
-
-	int ok = (bind(fd, (struct sockaddr *)&sa, salen) == 0);
-	close(fd);
-	return ok;
-}
-
-static int find_free_port_in_range(int lo, int hi, int socktype, int family,
-				   const int *exclude, int nexclude)
+static int find_free_ports_range(int *ports, int count, int lo, int hi,
+				 int socktype, int family)
 {
 	int range = hi - lo + 1;
 	int start = lo + ((unsigned)rand() % range);
+	int found = 0;
 
-	for (int i = 0; i < range; i++) {
+	for (int i = 0; i < range && found < count; i++) {
 		int port = lo + ((start - lo + i) % range);
 
-		/* skip already-returned ports */
-		int skip = 0;
-		for (int j = 0; j < nexclude; j++) {
-			if (exclude[j] == port) { skip = 1; break; }
-		}
-		if (skip)
-			continue;
+		int fd = socket(family, socktype, 0);
+		if (fd < 0)
+			return -1;
 
-		if (try_bind_port(port, socktype, family))
-			return port;
+		struct sockaddr_storage sa;
+		socklen_t salen;
+		setup_addr(&sa, &salen, family, port);
+
+		if (bind(fd, (struct sockaddr *)&sa, salen) == 0)
+			ports[found++] = port;
+
+		close(fd);
 	}
-	return -1;
+
+	return (found == count) ? 0 : -1;
 }
 
 /* --------------------------------------------------------------- */
@@ -168,7 +163,6 @@ int main(int argc, char **argv)
 	int use_range = 0;
 	int opt;
 
-	/* seed PRNG for range-mode random start offset */
 	srand((unsigned)(time(NULL) ^ getpid()));
 
 	while ((opt = getopt(argc, argv, "n:r:u6vh")) != -1) {
@@ -216,24 +210,22 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	int found[MAX_PORTS];
+	int ports[MAX_PORTS];
+	int rc;
 
-	for (int i = 0; i < count; i++) {
-		int port;
-		if (use_range)
-			port = find_free_port_in_range(range_lo, range_hi,
-						       socktype, family,
-						       found, i);
-		else
-			port = find_free_port(socktype, family, found, i);
+	if (use_range)
+		rc = find_free_ports_range(ports, count, range_lo, range_hi,
+					   socktype, family);
+	else
+		rc = find_free_ports(ports, count, socktype, family);
 
-		if (port < 0) {
-			fprintf(stderr, "fp: could not find a free port\n");
-			return 1;
-		}
-		found[i] = port;
-		printf("%d\n", port);
+	if (rc < 0) {
+		fprintf(stderr, "fp: could not find free port(s)\n");
+		return 1;
 	}
+
+	for (int i = 0; i < count; i++)
+		printf("%d\n", ports[i]);
 
 	return 0;
 }
