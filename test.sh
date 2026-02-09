@@ -93,7 +93,9 @@ assert_fail "too many for range"     $FP -n 200 -r 8000:8010
 # ── bind verification ───────────────────────────────────────────
 echo "== bind verification =="
 PORT=$($FP)
-if python3 -c "
+if ! command -v python3 >/dev/null 2>&1; then
+	echo "  SKIP: python3 not available"
+elif python3 -c "
 import socket, sys
 s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 try:
