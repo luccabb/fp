@@ -23,31 +23,32 @@ jobs:
 
   test-containers:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - name: CentOS Stream 9
             image: quay.io/centos/centos:stream9
-            pkg: dnf install -y gcc make
+            pkg: dnf install -y gcc make git tar
           - name: CentOS Stream 10
             image: quay.io/centos/centos:stream10
-            pkg: dnf install -y gcc make
+            pkg: dnf install -y gcc make git tar
           - name: Fedora 42
             image: registry.fedoraproject.org/fedora:42
-            pkg: dnf install -y gcc make
+            pkg: dnf install -y gcc make git tar
           - name: Fedora 43
             image: registry.fedoraproject.org/fedora:43
-            pkg: dnf install -y gcc make
+            pkg: dnf install -y gcc make git tar
           - name: Amazon Linux 2023
             image: amazonlinux:2023
-            pkg: dnf install -y gcc make
+            pkg: dnf install -y gcc make git tar
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
     name: ${{ matrix.name }}
     steps:
-      - uses: actions/checkout@v4
-
       - name: Install build tools
         run: ${{ matrix.pkg }}
+
+      - uses: actions/checkout@v4
 
       - name: Build
         run: make
