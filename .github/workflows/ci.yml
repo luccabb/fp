@@ -20,3 +20,18 @@ jobs:
 
       - name: Test
         run: make test
+
+  test-centos:
+    runs-on: ubuntu-latest
+    container: quay.io/centos/centos:stream9
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build tools
+        run: dnf install -y gcc make
+
+      - name: Build
+        run: make
+
+      - name: Test
+        run: make test
