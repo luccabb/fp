@@ -93,21 +93,7 @@ assert_fail "too many for range"     $FP -n 200 -r 8000:8010
 # ── bind verification ───────────────────────────────────────────
 echo "== bind verification =="
 PORT=$($FP)
-if ! command -v python3 >/dev/null 2>&1; then
-	echo "  SKIP: python3 not available"
-elif python3 -c "
-import socket, sys
-s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-try:
-    s.bind(('127.0.0.1', $PORT))
-    s.close()
-except OSError:
-    sys.exit(1)
-" 2>/dev/null; then
-	ok "port $PORT is actually bindable"
-else
-	fail "port $PORT could not be bound"
-fi
+assert "port $PORT is actually bindable"  $FP -r "$PORT:$PORT"
 
 # ── stress test (uniqueness under load) ──────────────────────────
 echo "== stress test =="
