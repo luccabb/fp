@@ -1,7 +1,8 @@
 PREFIX  ?= /usr/local
 BINDIR  ?= $(PREFIX)/bin
 CC      ?= cc
-CFLAGS  ?= -O2 -Wall -Wextra -pedantic -std=c99
+CFLAGS  ?= -O2
+CFLAGS  += -Wall -Wextra -pedantic -std=c99
 
 fp: fp.c
 	$(CC) $(CFLAGS) -o $@ $<
