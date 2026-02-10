@@ -9,10 +9,16 @@ Find free ports. Uses the kernel's own port allocator (`bind` to port 0) so the 
 brew install luccabb/tap/fp
 ```
 
-**Fedora / CentOS / RHEL (COPR):**
+**Fedora / CentOS / RHEL (dnf):**
 ```
-dnf copr enable luccabb/fp
+dnf copr enable luccabz/fp
 dnf install fp
+```
+
+**CentOS 7 / RHEL 7 / Amazon Linux 2 (yum):**
+```
+yum copr enable luccabz/fp
+yum install fp
 ```
 
 **From source:**
