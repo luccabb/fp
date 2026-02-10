@@ -47,12 +47,6 @@ jobs:
           - name: RHEL 9 (UBI)
             image: registry.access.redhat.com/ubi9/ubi:latest
             pkg: dnf install -y gcc make git tar
-          - name: CentOS 7
-            image: centos:7
-            pkg: yum install -y gcc make git tar
-          - name: Amazon Linux 2
-            image: amazonlinux:2
-            pkg: yum install -y gcc make git tar
     runs-on: ubuntu-latest
     container: ${{ matrix.image }}
     name: ${{ matrix.name }}
