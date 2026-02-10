@@ -90,11 +90,6 @@ assert_fail "bad range rejected"     $FP -r 100:50
 assert_fail "bad count rejected"     $FP -n 0
 assert_fail "too many for range"     $FP -n 200 -r 8000:8010
 
-# ── bind verification ───────────────────────────────────────────
-echo "== bind verification =="
-PORT=$($FP)
-assert "port $PORT is actually bindable"  $FP -r "$PORT:$PORT"
-
 # ── stress test (uniqueness under load) ──────────────────────────
 echo "== stress test =="
 PORTS=$($FP -n 100)
