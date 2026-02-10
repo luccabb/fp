@@ -1,5 +1,3 @@
-%global debug_package %{nil}
-
 Name:           fp
 Version:        1.0.0
 Release:        1%{?dist}
@@ -31,7 +29,9 @@ make test
 
 %files
 %license LICENSE
+%doc README.md
 %{_bindir}/fp
+%{_mandir}/man1/fp.1*
 
 %changelog
 * Sun Feb 09 2025 luccabb <luccabb@users.noreply.github.com> - 1.0.0-1

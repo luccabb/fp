@@ -1,0 +1,127 @@
+.TH FP 1 "2025-02-09" "fp 1.0.0" "User Commands"
+.SH NAME
+fp \- find free network ports
+.SH SYNOPSIS
+.B fp
+.RB [ \-n
+.IR count ]
+.RB [ \-r
+.IR min : max ]
+.RB [ \-u ]
+.RB [ \-6 ]
+.RB [ \-v ]
+.RB [ \-h ]
+.SH DESCRIPTION
+.B fp
+finds free network ports using the kernel's own port allocator.
+It creates a socket, binds it to port 0, and reads back the port
+the kernel assigned.
+The OS guarantees the returned port is not in use and not in TIME_WAIT
+at the moment of assignment.
+.PP
+When multiple ports are requested with
+.BR \-n ,
+all sockets are held open simultaneously so the kernel guarantees
+every returned port is unique.
+No retry loops or deduplication are needed.
+.PP
+For range-constrained searches
+.RB ( \-r ),
+.B fp
+try-binds each port starting from a randomised offset to minimise
+collisions between concurrent invocations.
+.SH OPTIONS
+.TP
+.BI \-n " count"
+Find
+.I count
+free ports (default: 1, max: 1024).
+Each port is printed on its own line.
+.TP
+.BI \-r " min" : "max"
+Constrain the search to ports between
+.I min
+and
+.IR max ,
+inclusive.
+Both values must be between 1 and 65535.
+.TP
+.B \-u
+Find UDP ports instead of TCP (the default).
+.TP
+.B \-6
+Use IPv6 instead of IPv4 (the default).
+.TP
+.B \-v
+Print the version number and exit.
+.TP
+.B \-h
+Print a usage summary and exit.
+.SH EXIT STATUS
+.TP
+.B 0
+Success.
+.TP
+.B 1
+An error occurred (invalid arguments, no free port found, or a
+system call failed).
+.SH EXAMPLES
+Find a single free TCP port:
+.PP
+.RS
+.nf
+$ fp
+48201
+.fi
+.RE
+.PP
+Find 5 unique free ports:
+.PP
+.RS
+.nf
+$ fp \-n 5
+48201
+48202
+48203
+48204
+48205
+.fi
+.RE
+.PP
+Find a free port in range 8000\-9000:
+.PP
+.RS
+.nf
+$ fp \-r 8000:9000
+8042
+.fi
+.RE
+.PP
+Find 3 free UDP IPv6 ports in a range:
+.PP
+.RS
+.nf
+$ fp \-n 3 \-r 8000:8100 \-u \-6
+8017
+8043
+8091
+.fi
+.RE
+.PP
+Start a server on a free port:
+.PP
+.RS
+.nf
+$ python3 \-m http.server $(fp)
+.fi
+.RE
+.SH SEE ALSO
+.BR bind (2),
+.BR getsockname (2),
+.BR socket (2)
+.SH AUTHOR
+luccabb
+.UR https://github.com/luccabb/fp
+.UE
+.SH LICENSE
+MIT
